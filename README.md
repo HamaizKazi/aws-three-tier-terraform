@@ -39,23 +39,34 @@ The VPC (`10.20.0.0/16`) spans **2 Availability Zones** and **8 subnets**: 2 pub
 
 - **Operational validation:** Custom scripts inspect infrastructure health, Auto Scaling activity, and HTTP endpoints; generated reports are kept locally.
 
-## Repository Layout (Sequence can differ)
+## Repository Layout
 
+```text
 aws-three-tier-terraform/
 ├── scripts/
-│   ├── healthcheck.ps1       # AWS health dashboard and optional report
-│   └── smoke-test.ps1        # Public HTTP /, /health, /api/health tests
+│   ├── healthcheck.ps1      # Infrastructure health checks
+│   └── smoke-test.ps1       # HTTP endpoint tests
 ├── reports/
-│   └── .gitkeep              # Generated reports stay local
-├── docs/
-│   └── aws-three-tier-architecture.png  # Lucidchart export
-├── autoscaling.tf
-├── launch_templates.tf
-├── monitoring.tf            # CloudWatch target-health alarm definitions
-├── ...                      # Other Terraform configuration files
-├── .terraform.lock.hcl
+│   └── .gitkeep             # Generated reports are ignored
+├── alb.tf                  # External/internal ALBs and target groups
+├── ami.tf                  # EC2 AMI lookup
+├── asg.tf                  # Web and app Auto Scaling Groups
+├── iam.tf                  # Instance roles and SSM permissions
+├── launch_templates.tf     # EC2 configuration and bootstrap
+├── monitoring.tf           # CloudWatch target-health alarms
+├── network.tf              # VPC, subnets, NAT and routing
+├── outputs.tf              # Deployment outputs
+├── parameters.tf           # SSM Parameter Store configuration
+├── providers.tf            # AWS provider configuration
+├── rds.tf                  # RDS MySQL and DB subnet group
+├── scaling.tf              # Auto Scaling policies
+├── security.tf             # Security groups
+├── variables.tf            # Input variables
+├── versions.tf             # Terraform and provider requirements
+├── .terraform.lock.hcl     # Provider dependency lock file
 ├── .gitignore
 └── README.md
+```
 
 
 ## Deployment
@@ -64,40 +75,42 @@ aws-three-tier-terraform/
 
 **1. Authenticate and configure**
 
-powershell
+```powershell
 aws configure --profile aws-learning
 aws sts get-caller-identity --profile aws-learning
 $env:AWS_PROFILE = "aws-learning"
+```
 
 
 Review the Terraform input variables before deployment. Supply required values locally or through your environment; **never commit passwords, `.tfvars`, or Terraform state files**.
 
 **2. Initialize, validate, and deploy**
 
-powershell
+```powershell
 terraform init
 terraform fmt -check
 terraform validate
 terraform plan -out=deploy.tfplan
 terraform apply deploy.tfplan
-
+```
 
 Review the plan before applying. Provisioning creates billable AWS resources, including ALBs, NAT Gateway, EC2, and RDS.
 
 **3. Verify infrastructure and application**
 
-powershell
+```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\healthcheck.ps1 -SaveReport
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1
-
+```
 
 Check that both target groups have **2 healthy targets**, that the Auto Scaling Groups are stable, and that the To-Do application can create, refresh, edit, and delete tasks.
 
 **4. Tear down when finished**
 
-powershell
+```powershell
 terraform plan -destroy
 terraform destroy
+```
 
 > **Data-loss warning:** Destroying RDS may permanently delete the To-Do database, depending on final snapshot settings. Review the destroy plan before approving it.
 
