@@ -35,15 +35,15 @@ resource "aws_launch_template" "web" {
 
     # Install operating-system packages
     dnf update -y
-    dnf install -y git nginx python3 python3-pip
+    dnf install -y git nginx python3.11 python3-pip
 
     # Clone the original workshop repository
-    git clone --depth 1 \
-      https://github.com/aws-samples/three-tier-web-application-flask.git \
+    git clone --depth 1 --branch v0.1.0 \
+      https://github.com/HamaizKazi/three-tier-web-application-flask.git \
       "$APP_DIR"
 
     # Create an isolated Python environment
-    python3 -m venv "$APP_DIR/venv"
+    python3.11 -m venv "$APP_DIR/venv"
 
     "$APP_DIR/venv/bin/python" -m pip install --upgrade pip
 
@@ -85,6 +85,11 @@ resource "aws_launch_template" "web" {
     server {
         listen 80;
         server_name _;
+
+        location = /health {
+            add_header Content-Type text/plain;
+            return 200 "ok\n";
+        }
 
         location = /api {
             return 301 /api/;
@@ -173,15 +178,15 @@ resource "aws_launch_template" "app" {
 
     # Install operating-system packages
     dnf update -y
-    dnf install -y git python3 python3-pip
+    dnf install -y git python3.11 python3-pip
 
     # Clone the original workshop repository
-    git clone --depth 1 \
-      https://github.com/aws-samples/three-tier-web-application-flask.git \
+    git clone --depth 1 --branch v0.1.0 \
+      https://github.com/HamaizKazi/three-tier-web-application-flask.git \
       "$APP_DIR"
 
     # Create an isolated Python environment
-    python3 -m venv "$APP_DIR/venv"
+    python3.11 -m venv "$APP_DIR/venv"
 
     "$APP_DIR/venv/bin/python" -m pip install --upgrade pip
 
@@ -192,6 +197,35 @@ resource "aws_launch_template" "app" {
     # Gunicorn is not included in the current app-tier
     # requirements file, so install it separately.
     "$APP_DIR/venv/bin/pip" install gunicorn
+
+
+    
+    # ------------------------------------------------
+    # WAIT FOR REQUIRED SSM PARAMETERS
+    # ------------------------------------------------
+    # Ensure all four parameters can be retrieved and
+    # the database password can be decrypted.
+
+    echo "Checking SSM Parameter Store readiness..."
+
+    for attempt in $(seq 1 36); do
+      if "$APP_DIR/venv/bin/python" -c \
+        'import boto3, sys; ssm = boto3.client("ssm", region_name="${var.region}"); result = ssm.get_parameters(Names=["master_username", "db_password", "endpoint", "db_instance_name"], WithDecryption=True); sys.exit(0 if len(result["Parameters"]) == 4 and not result["InvalidParameters"] else 1)' \
+        >/dev/null 2>&1; then
+
+        echo "SUCCESS: All four SSM parameters are accessible."
+        break
+      fi
+
+      if [ "$attempt" -eq 36 ]; then
+        echo "ERROR: Required SSM parameters are unavailable." >&2
+        exit 1
+      fi
+
+      echo "SSM not ready (attempt $attempt/36). Retrying in 5 seconds..."
+      sleep 5
+    done
+
 
     # Allow the application service user to access the code
     chown -R ec2-user:ec2-user "$APP_DIR"

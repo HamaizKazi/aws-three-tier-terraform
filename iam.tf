@@ -7,14 +7,11 @@ resource "aws_iam_role" "ec2_ssm" {
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-
     Statement = [{
       Effect = "Allow"
-
       Principal = {
         Service = "ec2.amazonaws.com"
       }
-
       Action = "sts:AssumeRole"
     }]
   })
@@ -35,24 +32,24 @@ resource "aws_iam_instance_profile" "ec2_ssm" {
   role = aws_iam_role.ec2_ssm.name
 }
 
-
 # ==================================================
 # 2. APP-TIER ROLE
 # ==================================================
+
+data "aws_kms_alias" "ssm" {
+  name = "alias/aws/ssm"
+}
 
 resource "aws_iam_role" "app_tier" {
   name = "${var.project_name}-app-tier-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-
     Statement = [{
       Effect = "Allow"
-
       Principal = {
         Service = "ec2.amazonaws.com"
       }
-
       Action = "sts:AssumeRole"
     }]
   })
@@ -63,35 +60,42 @@ resource "aws_iam_role" "app_tier" {
   }
 }
 
-# App-tier instances also need Session Manager.
 resource "aws_iam_role_policy_attachment" "app_tier_ssm" {
   role       = aws_iam_role.app_tier.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-# Allow the app tier to read only its required parameters.
 resource "aws_iam_role_policy" "app_tier_parameters" {
   name = "${var.project_name}-app-tier-parameters"
   role = aws_iam_role.app_tier.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-
-    Statement = [{
-      Effect = "Allow"
-
-      Action = [
-        "ssm:GetParameter",
-        "ssm:GetParameters"
-      ]
-
-      Resource = [
-        aws_ssm_parameter.master_username.arn,
-        aws_ssm_parameter.db_password.arn,
-        aws_ssm_parameter.endpoint.arn,
-        aws_ssm_parameter.db_instance_name.arn
-      ]
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters"
+        ]
+        Resource = [
+          aws_ssm_parameter.master_username.arn,
+          aws_ssm_parameter.db_password.arn,
+          aws_ssm_parameter.endpoint.arn,
+          aws_ssm_parameter.db_instance_name.arn
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = data.aws_kms_alias.ssm.target_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:EncryptionContext:PARAMETER_ARN" = aws_ssm_parameter.db_password.arn
+          }
+        }
+      }
+    ]
   })
 }
 

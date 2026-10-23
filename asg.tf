@@ -27,6 +27,14 @@ resource "aws_autoscaling_group" "web" {
     version = aws_launch_template.web.latest_version
   }
 
+  instance_refresh {
+    strategy = "Rolling"
+
+    preferences {
+      min_healthy_percentage = 50
+    }
+  }
+
   tag {
     key                 = "Name"
     value               = "${var.project_name}-web-instance"
@@ -75,6 +83,21 @@ resource "aws_autoscaling_group" "app" {
     id      = aws_launch_template.app.id
     version = aws_launch_template.app.latest_version
   }
+
+  instance_refresh {
+    strategy = "Rolling"
+
+    preferences {
+      min_healthy_percentage = 50
+    }
+  }
+
+  # Wait for app permissions and SSM parameters
+  # before launching application instances.
+  depends_on = [
+    aws_iam_role_policy.app_tier_parameters,
+    aws_iam_role_policy_attachment.app_tier_ssm
+  ]
 
   tag {
     key                 = "Name"

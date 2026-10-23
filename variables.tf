@@ -1,6 +1,6 @@
 variable "project_name" {
   type    = string
-  default = "aws-learning"
+  default = "aws-terraform"
 }
 
 variable "region" {

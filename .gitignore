@@ -1,16 +1,78 @@
-# Terraform working directory
+
+# ==========================================
+# TERRAFORM
+# ==========================================
+
+# Terraform working directory and providers
 .terraform/
 
-# Terraform state and backups
+# Terraform state files and backups
 *.tfstate
 *.tfstate.*
 
-# Local variable files containing secrets
+# Local Terraform variables (may contain secrets)
 *.tfvars
+*.tfvars.json
 
-# Saved plans
+# Terraform execution plans
 *.tfplan
+*.plan
+tfplan
+plan.out
 
 # Terraform crash logs
 crash.log
 crash.*.log
+
+# Terraform state lock information
+.terraform.tfstate.lock.info
+
+
+# ==========================================
+# AWS CREDENTIALS & SENSITIVE FILES
+# ==========================================
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local secrets
+secrets/
+credentials.json
+
+
+# ==========================================
+# DIAGNOSTIC REPORTS
+# ==========================================
+
+# Ignore generated AWS health reports
+reports/*
+
+# Keep the reports directory in GitHub
+!reports/.gitkeep
+
+
+# ==========================================
+# DEVELOPMENT ENVIRONMENT
+# ==========================================
+
+# Python cache
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE local settings
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
