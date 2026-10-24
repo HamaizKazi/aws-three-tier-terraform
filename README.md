@@ -10,7 +10,7 @@ This portfolio project deploys a Flask To-Do application adapted from the [AWS s
 
 The VPC (`10.20.0.0/16`) spans **2 Availability Zones** and **8 subnets**: 2 public, 2 private web, 2 private application, and 2 isolated database subnets. The web and application tiers each run in an Auto Scaling Group with **2 desired / 4 maximum** instances. One NAT Gateway provides outbound access for private instances.
 
-**Architecture diagram:** [View the AWS architecture](docs/aws-three-tier-architecture.png) *(export from Lucidchart and add this file before publishing).* 
+**Architecture diagram:** [View the AWS architecture](docs/Architecture.pdf) 
 
 > **Availability scope:** EC2 application tiers span two AZs. The current lab uses a single NAT Gateway and a single RDS instance; the full solution is not fault-tolerant across every component.
 
