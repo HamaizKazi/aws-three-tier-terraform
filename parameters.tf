@@ -15,6 +15,7 @@ resource "aws_ssm_parameter" "db_password" {
   name        = "db_password"
   description = "RDS database password"
   type        = "SecureString"
+  key_id      = aws_kms_key.ssm.arn
   value       = var.db_password
   overwrite   = true
 

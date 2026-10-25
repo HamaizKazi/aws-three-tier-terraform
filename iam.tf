@@ -36,10 +36,6 @@ resource "aws_iam_instance_profile" "ec2_ssm" {
 # 2. APP-TIER ROLE
 # ==================================================
 
-data "aws_kms_alias" "ssm" {
-  name = "alias/aws/ssm"
-}
-
 resource "aws_iam_role" "app_tier" {
   name = "${var.project_name}-app-tier-role"
 
@@ -88,7 +84,8 @@ resource "aws_iam_role_policy" "app_tier_parameters" {
       {
         Effect   = "Allow"
         Action   = "kms:Decrypt"
-        Resource = data.aws_kms_alias.ssm.target_key_arn
+        Resource = aws_kms_key.ssm.arn
+
         Condition = {
           StringEquals = {
             "kms:EncryptionContext:PARAMETER_ARN" = aws_ssm_parameter.db_password.arn
