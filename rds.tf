@@ -55,9 +55,8 @@ resource "aws_db_parameter_group" "mysql" {
 
 resource "aws_db_instance" "main" {
 
-    #checkov:skip=CKV_AWS_161:Budget-limited db.t3.micro lab uses password authentication via encrypted SSM; 
-    #defer IAM authentication until memory capacity and application token support are evaluated.
-    
+  #checkov:skip=CKV_AWS_161:Budget-limited db.t3.micro lab uses password authentication via encrypted SSM; defer IAM authentication until memory capacity and application token support are evaluated.
+
   identifier = "${var.project_name}-mysql"
 
   engine               = "mysql"
@@ -81,6 +80,7 @@ resource "aws_db_instance" "main" {
 
   multi_az                   = false
   backup_retention_period    = 1
+  copy_tags_to_snapshot      = true
   auto_minor_version_upgrade = true
 
   deletion_protection = true
