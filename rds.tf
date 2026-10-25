@@ -79,7 +79,7 @@ resource "aws_db_instance" "main" {
   backup_retention_period    = 1
   auto_minor_version_upgrade = true
 
-  deletion_protection = false
+  deletion_protection = true
   skip_final_snapshot = true
 
   enabled_cloudwatch_logs_exports = [
