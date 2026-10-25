@@ -13,6 +13,18 @@ resource "aws_lb" "external" {
     aws_subnet.public_b.id
   ]
 
+  access_logs {
+    bucket  = aws_s3_bucket.alb_logs.id
+    prefix  = "external"
+    enabled = true
+  }
+
+  depends_on = [
+    aws_s3_bucket_policy.alb_logs,
+    aws_s3_bucket_public_access_block.alb_logs,
+    aws_s3_bucket_server_side_encryption_configuration.alb_logs
+  ]
+
   tags = {
     Name    = "${var.project_name}-external-alb"
     Project = var.project_name
@@ -69,6 +81,18 @@ resource "aws_lb" "internal" {
   subnets = [
     aws_subnet.app_private_a.id,
     aws_subnet.app_private_b.id
+  ]
+
+  access_logs {
+    bucket  = aws_s3_bucket.alb_logs.id
+    prefix  = "internal"
+    enabled = true
+  }
+
+  depends_on = [
+    aws_s3_bucket_policy.alb_logs,
+    aws_s3_bucket_public_access_block.alb_logs,
+    aws_s3_bucket_server_side_encryption_configuration.alb_logs
   ]
 
   tags = {
