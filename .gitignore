@@ -1,61 +1,72 @@
-
 # ==========================================
 # TERRAFORM
 # ==========================================
 
-# Terraform working directory and providers
+# Downloaded providers and modules
 .terraform/
 
-# Terraform state files and backups
+# State files, backups, and state locks
 *.tfstate
 *.tfstate.*
+.terraform.tfstate.lock.info
 
-# Local Terraform variables (may contain secrets)
+# Local variable values
 *.tfvars
 *.tfvars.json
 
-# Terraform execution plans
+# Saved plans and exported plan contents
 *.tfplan
+*.tfplan.*
 *.plan
 tfplan
 plan.out
+deployment-plan.txt
+deployment-plan.json
+deploy-plan.txt
+deploy-plan.json
 
-# Terraform crash logs
+# Local Terraform overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform CLI configuration (may contain tokens)
+.terraformrc
+terraform.rc
+
+# Crash logs
 crash.log
 crash.*.log
 
-# Terraform state lock information
-.terraform.tfstate.lock.info
+# Keep .terraform.lock.hcl tracked for reproducible providers
 
 
 # ==========================================
-# AWS CREDENTIALS & SENSITIVE FILES
+# CREDENTIALS & SENSITIVE FILES
 # ==========================================
 
-# Environment variables
+.aws/
 .env
 .env.*
 !.env.example
 
-# Private keys and certificates
 *.pem
 *.key
 *.p12
 *.pfx
+*.ppk
 
-# Local secrets
 secrets/
+credentials
 credentials.json
 
 
 # ==========================================
-# DIAGNOSTIC REPORTS
+# GENERATED REPORTS
 # ==========================================
 
-# Ignore generated AWS health reports
 reports/*
-
-# Keep the reports directory in GitHub
 !reports/.gitkeep
 
 
@@ -63,16 +74,12 @@ reports/*
 # DEVELOPMENT ENVIRONMENT
 # ==========================================
 
-# Python cache
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
 venv/
-
-# IDE local settings
 .idea/
 
-# Operating system files
 .DS_Store
 Thumbs.db
 desktop.ini
