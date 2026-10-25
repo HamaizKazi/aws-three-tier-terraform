@@ -439,34 +439,283 @@ if ($parameters) {
     }
 }
 
+
+Section "DEPLOYMENT READINESS"
+
+foreach ($tier in @("web", "app")) {
+    $asgName = "$ProjectName-$tier-asg"
+    $tgName = "$ProjectName-$tier-tg"
+
+    $group = $projectAsgs | Where-Object {
+        $_.AutoScalingGroupName -eq $asgName
+    } | Select-Object -First 1
+
+    $targetGroup = $projectTgs | Where-Object {
+        $_.TargetGroupName -eq $tgName
+    } | Select-Object -First 1
+
+    if (-not $group -or -not $targetGroup) {
+        Check "FAIL" "$tier tier: expected ASG or target group missing."
+        continue
+    }
+
+    $desired = [int]$group.DesiredCapacity
+
+    if ($desired -lt 1) {
+        Check "FAIL" "$tier tier: desired capacity is zero."
+        continue
+    }
+
+    $readyMembers = @($group.Instances | Where-Object {
+        $_.LifecycleState -eq "InService" -and
+        $_.HealthStatus -eq "Healthy"
+    })
+
+    $health = AWS -Parts @(
+        "elbv2", "describe-target-health",
+        "--target-group-arn", $targetGroup.TargetGroupArn
+    )
+
+    if (-not $health) {
+        Check "FAIL" "$tier tier: target readiness could not be verified."
+        continue
+    }
+
+    $healthyIds = @(
+        $health.TargetHealthDescriptions |
+        Where-Object { $_.TargetHealth.State -eq "healthy" } |
+        ForEach-Object { $_.Target.Id }
+    )
+
+    $readyIds = @(
+        $readyMembers |
+        Where-Object { $healthyIds -contains $_.InstanceId } |
+        ForEach-Object { $_.InstanceId }
+    )
+
+    if ($readyIds.Count -ge $desired) {
+        Check "PASS" "$tier tier: $($readyIds.Count)/$desired desired instances are InService and ALB-healthy."
+    }
+    else {
+        Check "FAIL" "$tier tier not ready: $($readyIds.Count)/$desired desired instances are InService and ALB-healthy."
+    }
+}
+
+
 # --------------------------------------------
 # 9. PUBLIC HTTP HEALTH
 # --------------------------------------------
 
-Section "9. EXTERNAL HTTP HEALTH"
+Section "9. APPLICATION HTTP CHECKS"
 
 $publicLb = $projectLbs | Where-Object {
-    $_.Scheme -eq "internet-facing"
+    $_.LoadBalancerName -eq "$ProjectName-external-alb"
 } | Select-Object -First 1
 
-if ($publicLb) {
-    $url = "http://$($publicLb.DNSName)/health"
-    Write-Host "Testing: $url"
+if (-not $publicLb) {
+    Check "FAIL" "External ALB missing; application checks cannot run."
+}
+else {
+    $checks = @(
+        @{ Path = "/"; Label = "Web homepage" },
+        @{ Path = "/health"; Label = "Nginx health only" },
+        @{ Path = "/api/health"; Label = "Proxied application health" }
+    )
 
-    try {
-        $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
+    foreach ($test in $checks) {
+        $url = "http://$($publicLb.DNSName)$($test.Path)"
 
-        if ($response.StatusCode -eq 200) {
-            Check "PASS" "Public HTTP /health returned 200"
+        try {
+            $watch = [Diagnostics.Stopwatch]::StartNew()
+
+            $response = Invoke-WebRequest `
+                -Uri $url `
+                -UseBasicParsing `
+                -TimeoutSec 20 `
+                -MaximumRedirection 0 `
+                -ErrorAction Stop
+
+            $watch.Stop()
+
+            if ($response.StatusCode -eq 200) {
+                Check "PASS" "$($test.Label): HTTP 200 in $($watch.ElapsedMilliseconds) ms."
+            }
+            else {
+                Check "FAIL" "$($test.Label): HTTP $($response.StatusCode)."
+            }
         }
-        else {
-            Check "FAIL" "Public HTTP returned $($response.StatusCode)"
+        catch {
+            Check "FAIL" "$($test.Label): $($_.Exception.Message)"
         }
-    }
-    catch {
-        Check "WARN" "Public HTTP test failed: $($_.Exception.Message)"
     }
 }
+
+
+Section "10. HARDENING CONFIGURATION"
+
+# ALB attributes
+foreach ($name in @(
+    "$ProjectName-external-alb",
+    "$ProjectName-internal-alb"
+)) {
+    $lb = $projectLbs | Where-Object {
+        $_.LoadBalancerName -eq $name
+    } | Select-Object -First 1
+
+    if (-not $lb) {
+        Check "FAIL" "Expected ALB missing: $name"
+        continue
+    }
+
+    $result = AWS -Parts @(
+        "elbv2", "describe-load-balancer-attributes",
+        "--load-balancer-arn", $lb.LoadBalancerArn
+    )
+
+    if (-not $result) {
+        Check "FAIL" "$name attributes could not be verified."
+        continue
+    }
+
+    $attributes = @{}
+    foreach ($attribute in $result.Attributes) {
+        $attributes[$attribute.Key] = $attribute.Value
+    }
+
+    foreach ($key in @(
+        "routing.http.drop_invalid_header_fields.enabled",
+        "deletion_protection.enabled",
+        "access_logs.s3.enabled"
+    )) {
+        $level = if ($attributes[$key] -eq "true") {
+            "PASS"
+        } else {
+            "FAIL"
+        }
+
+        Check $level "$name : $key = $($attributes[$key])"
+    }
+
+    if ($attributes["access_logs.s3.enabled"] -eq "true") {
+        Write-Host "  Log bucket: $($attributes['access_logs.s3.bucket'])"
+        Write-Host "  Log prefix: $($attributes['access_logs.s3.prefix'])"
+        Write-Host "  Configuration verified; actual log delivery needs separate evidence."
+    }
+}
+
+# RDS hardening
+foreach ($db in $databases) {
+    foreach ($setting in @(
+        @{ Name = "Storage encryption"; Good = $db.StorageEncrypted },
+        @{ Name = "Private access"; Good = -not $db.PubliclyAccessible },
+        @{ Name = "Deletion protection"; Good = $db.DeletionProtection },
+        @{ Name = "Snapshot tag copying"; Good = $db.CopyTagsToSnapshot }
+    )) {
+        $level = if ($setting.Good) { "PASS" } else { "FAIL" }
+        Check $level "$($db.DBInstanceIdentifier): $($setting.Name)"
+    }
+
+    if ($db.MonitoringInterval -eq 60 -and $db.MonitoringRoleArn) {
+        Check "PASS" "RDS Enhanced Monitoring configured at 60 seconds."
+    }
+    else {
+        Check "FAIL" "RDS Enhanced Monitoring differs from the expected 60-second configuration."
+    }
+
+    foreach ($logType in @("error", "general", "slowquery")) {
+        $level = if ($db.EnabledCloudwatchLogsExports -contains $logType) {
+            "PASS"
+        } else {
+            "FAIL"
+        }
+
+        Check $level "RDS $logType log export configured."
+    }
+
+    foreach ($parameterGroup in $db.DBParameterGroups) {
+        $level = if ($parameterGroup.ParameterApplyStatus -eq "in-sync") {
+            "PASS"
+        } else {
+            "WARN"
+        }
+
+        Check $level "RDS parameter group $($parameterGroup.DBParameterGroupName): $($parameterGroup.ParameterApplyStatus)"
+    }
+
+    Write-Host "  Lab context: Single-AZ and password authentication are documented trade-offs."
+}
+
+# Password metadata and KMS key; never retrieve parameter values
+$passwordParameter = $parameters.Parameters | Where-Object {
+    $_.Name -eq "db_password"
+} | Select-Object -First 1
+
+if (-not $passwordParameter -or $passwordParameter.Type -ne "SecureString") {
+    Check "FAIL" "Database password parameter missing or not SecureString."
+}
+elseif (-not $passwordParameter.KeyId) {
+    Check "FAIL" "Password parameter KMS key could not be identified."
+}
+else {
+    $key = AWS -Parts @(
+        "kms", "describe-key",
+        "--key-id", $passwordParameter.KeyId
+    )
+
+    if ($key -and
+        $key.KeyMetadata.KeyManager -eq "CUSTOMER" -and
+        $key.KeyMetadata.KeyState -eq "Enabled") {
+        Check "PASS" "Password parameter uses an enabled customer-managed KMS key."
+    }
+    else {
+        Check "FAIL" "Password parameter customer-managed key could not be verified as enabled."
+    }
+}
+
+# Subnet public-IP defaults
+foreach ($subnet in $subnets.Subnets) {
+    $level = if ($subnet.MapPublicIpOnLaunch) { "FAIL" } else { "PASS" }
+    Check $level "$($subnet.SubnetId): automatic public IPv4 assignment disabled."
+}
+
+# CloudWatch alarms
+foreach ($tier in @("web", "app")) {
+    $alarmName = "$ProjectName-$tier-unhealthy-targets"
+
+    $result = AWS -Parts @(
+        "cloudwatch", "describe-alarms",
+        "--alarm-names", $alarmName
+    )
+
+    $alarm = $result.MetricAlarms | Select-Object -First 1
+
+    if (-not $alarm) {
+        Check "FAIL" "Alarm missing or could not be checked: $alarmName"
+        continue
+    }
+
+    $level = switch ($alarm.StateValue) {
+        "OK" { "PASS" }
+        "ALARM" { "FAIL" }
+        default { "WARN" }
+    }
+
+    Check $level "$alarmName state: $($alarm.StateValue)"
+
+    if ($alarm.ActionsEnabled) {
+        Check "PASS" "$alarmName actions enabled."
+    }
+    else {
+        Check "FAIL" "$alarmName actions disabled."
+    }
+
+    if (@($alarm.AlarmActions | Where-Object { $_ }).Count -eq 0) {
+        Check "WARN" "$alarmName has no ALARM action destination; no configured action will run when it enters ALARM."
+    }
+
+    Write-Host "  Alarm OK alone does not prove readiness; missing data may be treated as not breaching."
+}
+
 
 # --------------------------------------------
 # FINAL SUMMARY
@@ -490,5 +739,11 @@ Write-Host "`nNote: These checks do not prove database connectivity or full CRUD
 
 if ($SaveReport) {
     Stop-Transcript | Out-Null
-    Write-Host "Report saved: $file"
+    Write-Host "`nNote: This is a point-in-time check. It does not prove CRUD persistence, instance bootstrap completion, or actual log delivery."
 }
+
+if ($script:Fail -gt 0 -or $script:ApiErrors -gt 0) {
+    exit 1
+}
+
+exit 0
