@@ -17,6 +17,37 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
+resource "aws_db_parameter_group" "mysql" {
+  name_prefix = "${var.project_name}-mysql-"
+  family      = "mysql8.4"
+  description = "Enable MySQL general and slow query logging"
+
+  parameter {
+    name  = "general_log"
+    value = "1"
+  }
+
+  parameter {
+    name  = "slow_query_log"
+    value = "1"
+  }
+
+  parameter {
+    name  = "log_output"
+    value = "FILE"
+  }
+
+  parameter {
+    name  = "long_query_time"
+    value = "2"
+  }
+
+  tags = {
+    Name    = "${var.project_name}-mysql-parameters"
+    Project = var.project_name
+  }
+}
+
 
 # --------------------------------------------------
 # RDS MYSQL DATABASE
@@ -25,8 +56,10 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_db_instance" "main" {
   identifier = "${var.project_name}-mysql"
 
-  engine         = "mysql"
-  instance_class = var.db_instance_class
+  engine               = "mysql"
+  engine_version       = "8.4.11"
+  instance_class       = var.db_instance_class
+  parameter_group_name = aws_db_parameter_group.mysql.name
 
   db_name  = var.db_instance_name
   username = var.db_master_username
@@ -48,6 +81,16 @@ resource "aws_db_instance" "main" {
 
   deletion_protection = false
   skip_final_snapshot = true
+
+  enabled_cloudwatch_logs_exports = [
+    "error",
+    "general",
+    "slowquery"
+  ]
+
+  depends_on = [
+    aws_cloudwatch_log_group.rds
+  ]
 
   tags = {
     Name    = "${var.project_name}-mysql"
