@@ -6,7 +6,10 @@ resource "aws_lb" "external" {
   name                       = "${var.project_name}-external-alb"
   internal                   = false
   load_balancer_type         = "application"
+
   drop_invalid_header_fields = true
+  enable_deletion_protection = true
+
   security_groups            = [aws_security_group.external_alb.id]
   subnets = [
     aws_subnet.public_a.id,
@@ -76,7 +79,10 @@ resource "aws_lb" "internal" {
   name                       = "${var.project_name}-internal-alb"
   internal                   = true
   load_balancer_type         = "application"
+
   drop_invalid_header_fields = true
+  enable_deletion_protection = true
+  
   security_groups            = [aws_security_group.internal_alb.id]
   subnets = [
     aws_subnet.app_private_a.id,
