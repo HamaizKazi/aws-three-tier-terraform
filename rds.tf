@@ -82,6 +82,9 @@ resource "aws_db_instance" "main" {
   deletion_protection = true
   skip_final_snapshot = true
 
+  monitoring_interval = 60
+  monitoring_role_arn = aws_iam_role.rds_monitoring.arn
+
   enabled_cloudwatch_logs_exports = [
     "error",
     "general",
@@ -90,6 +93,7 @@ resource "aws_db_instance" "main" {
 
   depends_on = [
     aws_cloudwatch_log_group.rds
+    aws_iam_role_policy_attachment.rds_monitoring
   ]
 
   tags = {
