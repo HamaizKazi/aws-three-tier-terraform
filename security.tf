@@ -3,22 +3,6 @@ resource "aws_security_group" "external_alb" {
   description = "Allow HTTP from the internet to the public ALB"
   vpc_id      = aws_vpc.main.id
 
-  ingress {
-    description = "HTTP from anywhere"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = {
     Name    = "${var.project_name}-external-alb-sg"
     Project = var.project_name
@@ -58,22 +42,6 @@ resource "aws_security_group" "internal_alb" {
   name        = "${var.project_name}-internal-alb-sg"
   description = "Allow HTTP from the web tier to the internal ALB"
   vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description     = "HTTP from web tier"
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.web_tier.id]
-  }
-
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
   tags = {
     Name    = "${var.project_name}-internal-alb-sg"
@@ -123,13 +91,7 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.app_tier.id]
   }
 
-  egress {
-    description = "Allow all outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  egress = []
 
   tags = {
     Name    = "${var.project_name}-db-sg"
@@ -148,4 +110,44 @@ resource "aws_default_security_group" "default" {
     Name    = "${var.project_name}-default-restricted"
     Project = var.project_name
   }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "external_alb_http" {
+  security_group_id = aws_security_group.external_alb.id
+  description       = "Public HTTP access to external ALB"
+
+  cidr_ipv4   = "0.0.0.0/0"
+  ip_protocol = "tcp"
+  from_port   = 80
+  to_port     = 80
+}
+
+resource "aws_vpc_security_group_egress_rule" "external_alb_to_web" {
+  security_group_id            = aws_security_group.external_alb.id
+  referenced_security_group_id = aws_security_group.web_tier.id
+  description                  = "HTTP requests and health checks to web tier"
+
+  ip_protocol = "tcp"
+  from_port   = 80
+  to_port     = 80
+}
+
+resource "aws_vpc_security_group_ingress_rule" "internal_alb_from_web" {
+  security_group_id            = aws_security_group.internal_alb.id
+  referenced_security_group_id = aws_security_group.web_tier.id
+  description                  = "HTTP from web tier to internal ALB"
+
+  ip_protocol = "tcp"
+  from_port   = 80
+  to_port     = 80
+}
+
+resource "aws_vpc_security_group_egress_rule" "internal_alb_to_app" {
+  security_group_id            = aws_security_group.internal_alb.id
+  referenced_security_group_id = aws_security_group.app_tier.id
+  description                  = "Application requests and health checks to app tier"
+
+  ip_protocol = "tcp"
+  from_port   = 4000
+  to_port     = 4000
 }
