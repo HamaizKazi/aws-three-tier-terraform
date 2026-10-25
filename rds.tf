@@ -92,7 +92,7 @@ resource "aws_db_instance" "main" {
   ]
 
   depends_on = [
-    aws_cloudwatch_log_group.rds
+    aws_cloudwatch_log_group.rds,
     aws_iam_role_policy_attachment.rds_monitoring
   ]
 
