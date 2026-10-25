@@ -34,6 +34,10 @@ resource "aws_autoscaling_group" "web" {
       min_healthy_percentage = 50
     }
   }
+  #Ensure outbound rules exist before instance bootstrap starts
+  depends_on = [
+    aws_vpc_security_group_egress_rule.instance_web_access
+  ]
 
   tag {
     key                 = "Name"
@@ -96,7 +100,9 @@ resource "aws_autoscaling_group" "app" {
   # before launching application instances.
   depends_on = [
     aws_iam_role_policy.app_tier_parameters,
-    aws_iam_role_policy_attachment.app_tier_ssm
+    aws_iam_role_policy_attachment.app_tier_ssm,
+    aws_vpc_security_group_egress_rule.instance_web_access,
+    aws_vpc_security_group_egress_rule.app_to_db
   ]
 
   tag {
