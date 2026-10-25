@@ -31,7 +31,7 @@ resource "aws_cloudwatch_metric_alarm" "unhealthy_targets" {
   statistic   = "Maximum"
 
   treat_missing_data = "notBreaching"
-  actions_enabled    = false
+  actions_enabled    = true
 
   dimensions = {
     LoadBalancer = each.value.load_balancer
