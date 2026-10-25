@@ -137,3 +137,15 @@ resource "aws_security_group" "db" {
     Tier    = "db"
   }
 }
+
+resource "aws_default_security_group" "default" {
+  vpc_id = aws_vpc.main.id
+
+  ingress = []
+  egress  = []
+
+  tags = {
+    Name    = "${var.project_name}-default-restricted"
+    Project = var.project_name
+  }
+}
