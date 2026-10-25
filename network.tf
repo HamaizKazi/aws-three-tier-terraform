@@ -1,5 +1,10 @@
 data "aws_availability_zones" "available" {
   state = "available"
+
+  filter {
+    name   = "zone-name"
+    values = ["ap-southeast-2a", "ap-southeast-2b"]
+  }
 }
 
 resource "aws_vpc" "main" {
