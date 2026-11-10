@@ -30,7 +30,7 @@ jobs:
         with:
           terraform_version: "1.14.6"
           terraform_wrapper: false
-      
+
       - name: Check formatting
         run: terraform fmt -check -recursive
 
@@ -57,8 +57,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Lint Terraform
-        run: tflint --format compact
+      - name: Create report folder
+        run: mkdir -p reports
+
+      - name: Run TFLint and save report
+        run: |
+          set -o pipefail
+          tflint --format compact 2>&1 | tee reports/tflint.txt
+
+      - name: Upload TFLint report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tflint-report
+          path: reports/tflint.txt
+          if-no-files-found: warn
+          retention-days: 14
 
   checkov:
     name: Checkov IaC scan
@@ -75,8 +89,22 @@ jobs:
       - name: Install Checkov
         run: python -m pip install checkov==3.3.30
 
-      - name: Scan Terraform
-        run: checkov -d . --framework terraform
+      - name: Create report folder
+        run: mkdir -p reports
+
+      - name: Scan Terraform and save report
+        run: |
+          set -o pipefail
+          checkov -d . --framework terraform 2>&1 | tee reports/checkov.txt
+
+      - name: Upload Checkov report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: checkov-report
+          path: reports/checkov.txt
+          if-no-files-found: warn
+          retention-days: 14
 
   trivy:
     name: Trivy security scans
@@ -90,8 +118,27 @@ jobs:
         with:
           version: v0.68.2
 
-      - name: Scan Terraform configuration
-        run: trivy config --severity HIGH,CRITICAL --exit-code 1 .
+      - name: Create report folder
+        run: mkdir -p reports
 
-      - name: Scan repository for secrets
-        run: trivy fs --scanners secret --exit-code 1 .
+      - name: Scan Terraform config and save report
+        run: |
+          set -o pipefail
+          trivy config --severity HIGH,CRITICAL --exit-code 1 . 2>&1 |
+            tee reports/trivy-config.txt
+
+      - name: Scan for secrets and save report
+        if: always()
+        run: |
+          set -o pipefail
+          trivy fs --scanners secret --skip-dirs reports --exit-code 1 . 2>&1 |
+            tee reports/trivy-secrets.txt
+
+      - name: Upload Trivy reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-reports
+          path: reports/trivy-*.txt
+          if-no-files-found: warn
+          retention-days: 14
